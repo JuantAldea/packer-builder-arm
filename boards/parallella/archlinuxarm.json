@@ -9,7 +9,7 @@
     "file_target_extension": "tar.gz",
     "image_build_method": "new",
     "image_path": "parallella.img",
-    "image_size": "2G",
+    "image_size": "5G",
     "image_type": "dos",
     "image_partitions": [
       {
@@ -18,7 +18,7 @@
         "start_sector": "2048",
         "filesystem": "fat",
         "size": "400M",
-        "mountpoint": "/boot-tmp"
+        "mountpoint": "/tmp/boot-tmp"
       },
       {
         "name": "root",
@@ -34,23 +34,66 @@
   }],
   "provisioners": [
     {
+      "type": "file",
+      "source": "linux-parallella-6.1.25-1-armv7h.pkg.tar.zst",
+      "destination": "/tmp/linux-parallella-6.1.25-1-armv7h.pkg.tar.zst"
+    },
+    {
+      "type": "file",
+      "source": "linux-parallella-headers-6.1.25-1-armv7h.pkg.tar.zst",
+      "destination": "/tmp/linux-parallella-headers-6.1.25-1-armv7h.pkg.tar.zst"
+    },
+    {
       "type": "shell",
       "inline": [
-        "mv boot/* boot-tmp/",
-        "mount --bind boot-tmp boot",
+        "mv boot/* /tmp/boot-tmp/",
+        "mount --bind /tmp/boot-tmp /boot",
+        "echo \"en_US.UTF-8 UTF-8\"  >> /etc/locale.gen",
 
-        "pacman-key --init",
-        "pacman-key --populate archlinuxarm",
+        "locale-gen",
+
         "rm -f /etc/resolv.conf",
         "echo 'nameserver 8.8.8.8' > /etc/resolv.conf",
         "echo '\n[mkaczanowski]\nServer = https://raw.githubusercontent.com/mkaczanowski/pkgbuilds/master/pkg/$arch\nSigLevel = PackageOptional' >> /etc/pacman.conf",
-        "pacman -R linux-armv7 --noconfirm",
-        "pacman -Sy linux-parallella --noconfirm",
-        "pacman -S parallella-fpga-bitstream-headless-7010 --noconfirm",
+        "echo parallella > /etc/hostname",
 
-        "echo 'pacman -Sy paralella-examples epiphany-sdk' > /home/alarm/other_packages",
+        "pacman-key --init",
+        "pacman-key --populate archlinuxarm",
+        "pacman -R --noconfirm linux-armv7",
+        "pacman -Sy --noconfirm parallella-fpga-bitstream-headless-7020 vim git sudo dtc inetutils base-devel patch",
+        "pacman -U /tmp/linux-parallella-headers-6.1.25-1-armv7h.pkg.tar.zst /tmp/linux-parallella-6.1.25-1-armv7h.pkg.tar.zst --noconfirm",
 
-        "umount boot"
+        "umount /boot",
+
+        "sed -i 's/exit $E_ROOT/echo \"Nah, let me run makepkg as root.\"/' /usr/bin/makepkg",
+        "mkdir -p /tmp/yay/",
+        "cd /tmp/yay",
+        "curl https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD\\?h\\=yay-bin > PKGBUILD",
+        "makepkg",
+        "pacman --noconfirm -U yay-bin*",
+
+        "yay -S --noconfirm epiphany-sdk epiphany-elf-binutils epiphany-elf-gcc",
+
+        "mkdir -p /tmp/parallella-examples/",
+        "cd /tmp/parallella-examples",
+        "curl https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=parallella-examples > PKGBUILD",
+        "sed -i 's/git:/git+https:/' PKGBUILD",
+        "makepkg",
+        "pacman --noconfirm -U parallella-examples-*",
+        "export EPIPHANY_HOME=/opt/adapteva/esdk",
+        "sh /opt/adapteva/esdk/setup.sh",
+        "git clone https://github.com/parallella/pal.git /tmp/pal",
+        "cd /tmp/pal",
+        "./bootstrap",
+        "./configure --enable-device-epiphany",
+        "make",
+        "make install",
+
+        "echo EPIPHANY_HOME=/opt/adapteva/esdk >> /home/alarm/.bashrc",
+        "echo \\${EPIPHANY_HOME}/setup.sh >> /home/alarm/.bashrc",
+        "echo \"alarm ALL=(ALL:ALL) ALL\" >> /etc/sudoers",
+
+        "echo Finished"
       ]
     }
   ],
